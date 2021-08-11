@@ -2,7 +2,7 @@
 	    Active Directory Powershell powered GUI
 .NOTES
 	Author		: Hayden Trail  
-    email		: hayden@tailoredit.co.nz, hayden.trail@westpac.co.nz (Contractor)
+    email		: hayden@tailoredit.co.nz
     Company		: Tailored IT Solutions
     File Name	: powershellGUI.ps1
  
