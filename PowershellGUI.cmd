@@ -1,0 +1,1 @@
+start pwsh -ep Bypass -f ".\powershellGUI.ps1"
