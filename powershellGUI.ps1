@@ -1,11 +1,18 @@
  <#
 .SYNOPSIS
-	    Active Directory Powershell powered GUI
+	    Active Directory Powershell GUI
 .NOTES
 	Author		: Hayden Trail  
-    email		: hayden@tailoredit.co.nz, hayden.trail@westpac.co.nz (Contractor)
+    email		: hayden@tailoredit.co.nz
     Company		: Tailored IT Solutions
     File Name	: powershellGUI.ps1
+    
+.VERSION CONTROL
+    see https://github.com/haydentrail/ADPowershellGUI
+
+.TODO
+    - plugins for new tabs
+    - pin tabs to retain
  #>
 $app = @{title="Active Directory Powershell GUI";version="0.1.3"}
 function global:loadAssembly($assembly){
@@ -234,18 +241,16 @@ $objects.keys | % {
         } 
         $OBJECTOPTIONS += "</div>"
     }else{
-        $OBJECTOPTIONS += "<div id=`"options-$_`" ourType=`"$_`" class=`"row div-options $display`">There are no search options for $((Get-Culture).TextInfo.ToTitleCase($_)) </div>"
+        $OBJECTOPTIONS += "<div id=`"options-$_`" ourType=`"$_`" class=`"row div-options $display`"><div class=`"alert alert-info`" role=`"alert`">There are no additional search options for $((Get-Culture).TextInfo.ToTitleCase($_)) </div></div>"
     }
 }
 #============================================
-$aboutInfo = if($global:adModuleDllLoaded){'<div class="alert alert-warning" role="alert">This script is running using the Active Directory dll import, limited functionality and properties are available.<p>For full functionality please install the RSAT tools</p></div>'}else{""}
-if(!$global:canExportToExcel){$aboutInfo += "<div class=`"alert alert-info`" role=`"alert`">The ImportExcel module is not installed.  To enable export to Excel you can install this by <a href=`"#`" onclick=`"`$('#powershellButton').attr('object','importExcel').attr('cmd','install').trigger('click')`">Clicking here</a></div>"}
+$global:aboutInfo = if($global:adModuleDllLoaded){'<div class="alert alert-warning" role="alert">This script is running using the Active Directory dll import, limited functionality and properties are available.<p>For full functionality please install the RSAT tools</p></div>'}else{""}
+if(!$global:canExportToExcel){$global:aboutInfo += "<div class=`"alert alert-info`" role=`"alert`">The ImportExcel module is not installed.  To enable export to Excel you can install this by <a href=`"#`" onclick=`"`$('#powershellButton').attr('object','importExcel').attr('cmd','install').trigger('click')`">Clicking here</a></div>"}
 #============================================
-#$html = $html -replace "{{DOMAINLIST}}", $DOMAINLIST
 $html = $html -replace "{{TYPELIST}}", $TYPELIST
 $html = $html -replace "{{OBJECTPROPERTIES}}", $OBJECTPROPERTIES
 $html = $html -replace "{{OBJECTOPTIONS}}", $OBJECTOPTIONS
-$html = $html -replace "{{ABOUTINFO}}", $aboutInfo
 #============================================
 $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.bounds.height
 
@@ -310,9 +315,22 @@ function homeSubmitSearch() {
                     "forest" {@('ResultSetSize';'Filter';'properties') | %{$params.remove($_)};break}
                 }
                 $paramString = hashToString $params $true
-                 write-log "INFO" "Calling: get-ad$typeSelect $paramString"
-                [System.Windows.Forms.Application]::DoEvents()
-                $object = & "Get-AD$typeSelect" @params | select $properties
+                if($searchType -eq "RAW"){
+                    $identity = $identity -ireplace "{{domain}}", $domain
+                    $global:config.domains.PSObject.Properties | %{$identity = $identity -ireplace "{{$($_.name)-domains}}",  "'$($_.value -join "';'")'"}
+
+                    write-log "INFO" "Calling Raw Expression: $identity"
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $object = Invoke-Expression $identity
+                    if($object){
+                        $propObj = if($object.gettype().name -eq 'Object[]'){$object[0]}else{$object}
+                        $properties = $propObj.PSObject.Properties | Select-Object -Property Name | %{$_.name}
+                    }
+                }else{
+                    write-log "INFO" "Calling: get-ad$typeSelect $paramString"
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $object = & "Get-AD$typeSelect" @params | select $properties
+                }
                 <#switch ($typeSelect) {
                     "User" {$object = Get-ADUser @params | select $properties}
                     "Computer" {$object = Get-ADComputer @params | select $properties}
@@ -322,7 +340,7 @@ function homeSubmitSearch() {
                 }#>
 
                 $count = if(!$object){0}elseif($object.count){$object.count}else{1}
-                 write-log "INFO" "$domain Query returned $count objects"
+                write-log "INFO" "$domain Query returned $count objects"
 
                 $result = @()
                 $translations = @{memberof="Groups"}
@@ -335,12 +353,14 @@ function homeSubmitSearch() {
                         $exportItem = $_.PsObject.Copy()
 
                         $_.PSObject.Properties | %{
-                            if($properties.contains($_.Name)){
+                            #if($properties.contains($_.Name)){
                                 #write-host "$($_.name) = $($_.TypeNameOfValue)"
                                 if($_.TypeNameOfValue -eq "Microsoft.ActiveDirectory.Management.ADPropertyValueCollection"){
                                     $name = if($translations.keys.contains($_.Name.tolower())){$translations.($_.Name.tolower())}else{$_.Name}
                                     $isDN = $valuesAreDNs.contains($_.Name.tolower())
                                     if($_.Value.count -eq 0) {
+                                        Add-Member -InputObject $exportItem -type NoteProperty -Name "membersCount" -Value 0 -Force
+                                        Add-Member -InputObject $item -type NoteProperty -Name "membersCount" -Value 0 -Force                          
                                         Add-Member -InputObject $exportItem -type NoteProperty -Name $_.Name -Value "Empty" -Force
                                         Add-Member -InputObject $item -type NoteProperty -Name $_.Name -Value "Empty" -Force
                                     }else{
@@ -374,7 +394,7 @@ function homeSubmitSearch() {
                                         }    
                                     }
                                 }
-                            }
+                            #}
                         }
                         if($properties.contains('lastLogon')){
                             $ll = if($_.lastLogon){[DateTime]::FromFileTime($_.lastLogon)}else{'Never'}
@@ -468,22 +488,26 @@ function homeSubmitSearch() {
                 if($result){$global:queryResults."$global:queryIndex" = @{result=$result;query="$typeSelect objects with $($searchType):$identity in $domain"}}
                 $ReturnObjects.$domain = $object    
             }catch{
-                 write-log "ERROR"  "$domain. $($_.Exception.Message)"
+                write-log "ERROR" "$domain. $($_.Exception.Message)"
                 $ReturnObjects.$domain = $_.Exception.Message  
             } 
         }  
         #============================================     
         $heightSet = $false
         $resultCount = 0
+        $errorString = ""
         $selectedDomains | %{
             $domain  = $_
             scriptbox $typeSelect $searchType $identity $_ $properties $options $ReturnObjects $creds $adModulePath $maxResults 
             $result = $ReturnObjects.$domain
+            
+            write-host $result.GetType().name
             if($result -eq $null){
                 write-log "WARN" "$domain query returned 0 objects"
                 $web.Document.InvokeScript("addTab", @("home-result";$typeSelect;$domain;"0 objects returned",'info',$global:queryIndex))
-            }elseif([string]$result.GetType() -eq "string"){
+            }elseif($result.GetType().name -eq "String"){
                 $web.Document.InvokeScript("addTab", @("home-result";$typeSelect;$domain;[string]$result,'danger',$global:queryIndex))
+                $errorString = [string]$result
             }else{           
                 $count = if([string]$result.gettype() -eq "System.Object[]"){$result.count}else{1}  
                 $resultCount += $count
@@ -510,7 +534,7 @@ function homeSubmitSearch() {
                 if($height -gt 100){$web.Height = $height -40; $form.Height = $height}    
             }#>
         }
-        if($resultCount -eq 0){$web.Document.InvokeScript("showAlert", @("warning"; "No Data"; "No $typeSelect objects were found with the search string $identity"));}
+        if($resultCount -eq 0){$web.Document.InvokeScript("showAlert", @("warning"; "No Data"; if($errorString){$errorString}else{"No $typeSelect objects were found with the search string $identity"}));}
         adjustClassOnHTMLElement "Remove" "d-none" "home-result-card"
         adjustClassOnHTMLElement "Add" "show" "home-result"
         $web.Document.GetElementById("home-result-card").Focus()
@@ -622,7 +646,7 @@ function export($object){
     adjustClassOnHTMLElement "Remove" "d-none" "ReadyOverlay";[System.Windows.Forms.Application]::DoEvents() 
     $result = [pscustomobject]($global:queryResults."$object".result)
     if($global:canExportToExcel){
-        $exported = exportToExcel $result $file "Powershell GUI" -format (@{title="Powershell GUI Export";subtitle="$($result.count) objects returned from query '$($global:queryResults."$object".query)'"})
+        $exported = exportToExcel $result $file "Powershell GUI" -format (@{title="Powershell GUI Export";subtitle="$($result.count) objects returned from query '$($global:queryResults."$object".query)'. Generated $(Get-Date -Format "dddd dd/MM/yyyy HH:mm")"})
         if([string]$exported.getType() -eq "string"){
             $web.Document.InvokeScript("showAlert", @("error"; "Failed to export data";$exported));
         }else{
@@ -688,6 +712,18 @@ function removeDomain($data){
         
     }    
 }
+function saveQuery($name){
+    $cmd = $web.document.all["home-identity"].GetAttribute("value")
+    if ($global:config.PSobject.Properties.Name -contains "Saved Queries"){
+        Add-Member -InputObject $global:config."Saved Queries" -type NoteProperty -Name $name -Value $cmd -Force
+    }else{
+        Add-Member -InputObject $global:config -type NoteProperty -Name "Saved Queries" -Value @{$name=$cmd} -Force
+    }
+}
+function ShowSavedQueries{
+    $options = $global:config."Saved Queries".PSobject.Properties | %{"<option value=`"$([System.Web.HttpUtility]::HtmlEncode($_.Value))`">$($_.Name)</option>"}
+    $web.Document.InvokeScript("loadQuery", @(($options -join "")))
+}
 function domainsFromForest($data){
     $vals = $data+',,' -split ","
     $description = if($vals[1]){$vals[1]}else{$vals[0]}
@@ -710,15 +746,47 @@ function DocumentCompleted(){
     write-host -Message "DocumentCompleted event fired"
     if ($global:isLoaded -eq $true) { return }
     $global:isLoaded = $true
-    write-log "INFO" "Initializing sync objects"
+    #==============================================
+    #Get version and about
+    try{
+        write-log "INFO" "Attempting to get version info from https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/version.info"
+        [System.Windows.Forms.Application]::DoEvents() 
+        $appInfo = "$(Invoke-WebRequest https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/version.info)||".split("|")
+        if($appInfo[0]-match '[0-9].[0-9].[0-9]' -and $app.version -lt $appInfo[0]){
+            $app.newVersion = $true
+            $versionInfo = "A newer version of this app is available.<br> You have version $($app.version), the latest version is $($appInfo[0]).<p/><p>You can download the latest version here <a href=`"#`" onClick=`"`$('#powershellButton').attr('object','$($appInfo[1])').attr('cmd','openURL').trigger('click')`">$($appInfo[1])</a><p>The new version features $($appInfo[2])"
+            $global:aboutInfo += "<div class=`"alert alert-info`" role=`"alert`">$versionInfo</div>"
+            write-log "INFO" "A newer version of this app is available.You have version $($app.version), the latest version is $($appInfo[0])"
+            $web.Document.InvokeScript("showAlert", @("info";"Newer Version Available";$versionInfo))
+        }
+    }catch{write-log "ERROR" "Failed to get the current version. $($_.Exception.Message)"}
+    
+    if(!(Test-Path -Path "$scriptDir\about.md" -PathType Leaf) -or $app.newVersion){
+        try{
+            [System.Windows.Forms.Application]::DoEvents() 
+            write-log "INFO" "Attempting to download readme file from https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/README.md" -logonly $true
+            (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/README.md", "$scriptDir\about.md")
+        }catch{write-log "ERROR" "Failed to download readme file. $($_.Exception.Message)"}  
+    }
+    if(Test-Path -Path "$scriptDir\about.md" -PathType Leaf){
+        try{
+            [System.Windows.Forms.Application]::DoEvents() 
+            write-log "INFO" "loading readme info" -logonly $true
+            $readme = Get-Content("$scriptDir\about.md")
+            $global:aboutInfo += ($readme.Split([string[]]"`r`n", [StringSplitOptions]::None) -join "<br>")
+        }catch{write-log "ERROR" "Failed to download readme file. $($_.Exception.Message)"}  
+    }
+    $web.Document.GetElementById("home-about").InnerHTML =  $global:aboutInfo
+    #==============================================
     
     write-log "INFO" "Registering form events"
     $web.document.all["home-submitSearch"].Add_click({homeSubmitSearch})
 
     Do{[System.Windows.Forms.Application]::DoEvents() ;Start-Sleep -Milliseconds 100}
     While ($web.document.all["main"].DomElement.clientHeight -eq 0)
-    $web.Height = $form.Height # = $web.document.all["main"].DomElement.clientHeight +80
-    $web.Width = $form.Width # = $web.document.all["main"].DomElement.clientHeight +80
+    if(-not($global:config.PSobject.Properties.Name -contains 'Form Dimensions')){
+        if($web.Height -lt $form.Height){$web.Height = $form.Height = $web.document.all["main"].DomElement.clientHeight +80}
+    }
     
     $domainSelected = $null
     #load the configuration from the file
@@ -747,7 +815,11 @@ function DocumentCompleted(){
             'typeSelect'{
                 $web.Document.InvokeScript("hometypeSelect", @($value.tolower()))
                 $web.Document.DomDocument.getElementById("home-typeSelect") | %{if($_.text -eq $value){$_.selected = $true}else{$_.selected = $false}}
-                ;break
+                break
+            }
+            'searchType'{
+                $web.Document.InvokeScript("changeSearch", @($value))
+                break
             }
             default{
                 if($web.document.all["home-$property"]){$web.document.all["home-$property"].InnerText = $value}
@@ -777,6 +849,9 @@ function DocumentCompleted(){
             "addDomain"{addDomain $object;break;}
             "removeDomain"{removeDomain $object;break;}
             "domainsFromForest"{domainsFromForest $object;break;}
+            "saveQuery"{saveQuery $object;break;}
+            "ShowSavedQueries"{ShowSavedQueries;break;}
+            "openURL"{Start-Process $object;break;}
             default{write-host "$_ object = $object"}
         }        
     })
@@ -792,7 +867,7 @@ write-log "INFO" "Initializing $($MyInvocation.MyCommand)" $true
 # Main
 $global:isLoaded = $false
 
-$form = New-Object -TypeName System.Windows.Forms.Form -Property @{Width = 1200; Height = 410;StartPosition =1;MaximizeBox=$false; text = $app.title;windowState="maximized" }
+$form = New-Object -TypeName System.Windows.Forms.Form -Property @{Width = 1200; Height = 410;StartPosition =1;MaximizeBox=$false; text = $app.title}
 $web = New-Object -TypeName System.Windows.Forms.WebBrowser -Property @{Width = 1200; Height = 410; DocumentText = $html; ScriptErrorsSuppressed = $false}
 $web.Add_DocumentCompleted({DocumentCompleted})
 
@@ -801,7 +876,12 @@ $web.Add_DocumentCompleted({DocumentCompleted})
 #write-host "========================================"
 
 write-log "INFO" "Form version = $($form.ProductName) $($form.ProductVersion)"
-$form.Add_ResizeEnd({write-host "form resized"; $web.Width = $form.size.Width-20; $web.Height = $form.size.Height-40 })
+$form.Add_ResizeEnd({write-host "form resized"; $web.Width = $form.size.Width-20; $web.Height = $form.size.Height-60 })
+$form.Add_Closing({write-host "form closing"; Add-Member -InputObject $global:config -type NoteProperty -Name "Form Dimensions" -Value @{top=$form.top;left=$form.left;width=$form.width;height=$form.height} -Force })
+if($global:config.PSobject.Properties.Name -contains 'Form Dimensions'){
+    $global:config.'Form Dimensions'.PSObject.Properties | %{$form.($_.name) = $_.value}
+    $web.width = $form.Width; if($web.Height -lt $form.Height){$web.Height = $form.Height}
+}
 $form.Controls.Add($web)
 $form.activate()
 $form.ShowDialog() | out-null
