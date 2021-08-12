@@ -29,6 +29,7 @@ Requires the Microsoft Remote Server Administration tools installed for the acti
   * Added ability to save and load RAW queries
   * Added form returns to the last location and size
   * Added version control
+
 ## Known issues 
 
  * Sometimes the form doesnt allow interaction, not sure why this happens.
