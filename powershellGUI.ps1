@@ -18,7 +18,7 @@
  
 $app = @{
     title="Active Directory Powershell GUI"
-    version="0.1.2"
+    version="0.1.3"
     repo="https://github.com/haydentrail/ADPowershellGUI/"
     repoRaw="https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/"
     versionFile="main/version.info"
