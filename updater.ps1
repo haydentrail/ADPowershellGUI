@@ -13,7 +13,7 @@
     [Parameter(Mandatory=$true)][string]$appVersion,
     [Parameter(Mandatory=$true)][string]$repoRaw,
     [Parameter(Mandatory=$true)][string]$versionFile,
-    [Parameter(Mandatory=$true)][array]$filesToDownload
+    [Parameter(Mandatory=$true)][string]$filesToDownload
     )
 $global:app = @{title="Script Updater";version="0.1";isLoaded=$false}
 $afterCmd = "`$('#powershellButton').attr('object','$callingScript').attr('cmd','returnToCaller').trigger('click');"
@@ -33,7 +33,7 @@ $downloadFile = {
 function proceed(){
     $jobsDone = $filesToDownload.count
     $Results = @{}
-    $filesToDownload | ForEach-Object -begin {$index=0} -process{
+    $filesToDownload -split ";" | ForEach-Object -begin {$index=0} -process{
         $listItem = $web.Document.CreateElement("li");
         $listItem.SetAttribute("className","list-group-item d-flex justify-content-between align-items-center");
         $listItem.InnerHtml = "$_<span id=`"$_`" class=`"badge bg-primary badge-pill`">Downloading...</span>"
