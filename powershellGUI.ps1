@@ -18,7 +18,7 @@
  
 $app = @{
     title="Active Directory Powershell GUI"
-    version="0.1.3"
+    version="0.1.2"
     repo="https://github.com/haydentrail/ADPowershellGUI/"
     repoRaw="https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/"
     versionFile="main/version.info"
@@ -886,7 +886,7 @@ function DocumentCompleted(){
             "ShowSavedQueries"{ShowSavedQueries;break;}
             "doUpdate"{
                 write-log "INFO" "Calling: Start-Process pwsh -ArgumentList -ep Bypass -f '$PSScriptRoot\updater.ps1'"
-                Start-Process "pwsh" -WorkingDirectory $PSScriptRoot -ArgumentList "-ep Bypass -f `"$PSScriptRoot\updater.ps1`"",$PSCommandPath,$app.version,"$($app.repo)blob/main/","$($app.repoRaw)$($app.versionFile)","powershellGUI.ps1;GUI.html";$form.close();break;}
+                Start-Process "pwsh" -WorkingDirectory $PSScriptRoot -ArgumentList "-noe","-ep","Bypass","-f","`"updater.ps1`"","AD Powershell GUI","`"$PSCommandPath`"",$app.version,"$($app.repoRaw)main/","$($app.repoRaw)$($app.versionFile)","powershellGUI.ps1;GUI.html";$form.close();break;}
             "StartProcess"{
                 $argList = $psBtn.GetAttribute("argList")
                 $psBtn.setAttribute("argList","")
