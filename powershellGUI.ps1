@@ -13,8 +13,18 @@
 .TODO
     - plugins for new tabs
     - pin tabs to retain
+    - create updater script
  #>
-$app = @{title="Active Directory Powershell GUI";version="0.1.3"}
+ 
+$app = @{
+    title="Active Directory Powershell GUI"
+    version="0.1.2"
+    repo="https://github.com/haydentrail/ADPowershellGUI/"
+    repoRaw="https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/"
+    versionFile="main/version.info"
+    readme="main/README.md"
+    updater="main/updater.ps1"
+}
 function global:loadAssembly($assembly){
     try{[Reflection.Assembly]::Load($assembly) | Out-Null}
     catch{
@@ -72,7 +82,6 @@ function hashToString($hash,$asParameterString){
     if($asParameterString -eq $false){$hashstr += "}"}
     return $hashstr 
 }
-
 # exportToExcel - tries to use the function export-excel, if the file is open or it cant write for some reason it will prompt to retry
 function global:exportToExcel($objectsToExport,$excelFile,$sheetName,$format){#,$deleteSheetFirst){
     try{
@@ -169,13 +178,33 @@ function global:formatExcel($xlfile,$xlWorkSheets){
         write-log "WARN" "Couldn't find $xlfile for formatting"
     }    
 }
+function global:addTab($tab,$scriptOnly=$false){
+    write-log "INFO" "Adding $($tab.title) to gui."
+    $html = @{
+        tab="<button onclick=`"openTab(event, 'nav-$($Tab.id)','-main')`" class=`"nav-link nav-link-main`" id=`"nav-$($Tab.id)-tab`" data-bs-toggle=`"tab`" data-bs-target=`"#nav-$($Tab.id)`" type=`"button`" role=`"tab`" aria-controls=`"nav-$($Tab.id)`" aria-selected=`"false`">$($Tab.name)</button>"
+        tabPane=@"
+                <div class="tab-pane tab-pane-main" id="nav-$($Tab.id)" role="tabpanel" aria-labelledby="nav-$($Tab.id)-tab">
+                <div class="card">
+                    <div class="card-header">$($Tab.Title)</div>
+                    <div class="card-body">$($Tab.body)</div>
+                </div>
+            </div>
+"@
+    }
+    $web.Document.GetElementById("nav-tab").InnerHtml += $html.tab
+    $web.Document.GetElementById("nav-tabContent").InnerHtml += $html.tabPane
+
+    $script = $web.Document.CreateElement("script");
+    $script.SetAttribute("text",$tab.scriptBlock);
+    $web.Document.GetElementsByTagName("head")[0].AppendChild($script);
+    $web.Document.all[$Tab.buttonID].add_click($Tab.buttonScript)
+}
 #===================================================================
 #===================================================================
-$scriptDir = (Get-Item $PSCommandPath ).DirectoryName
 $scriptName = (Get-Item $PSCommandPath ).Basename
-$configFile = "$scriptDir\$scriptName.config"
-$logfile = "$scriptDir\$scriptName.log"
-$adModulePath = "$scriptDir\ActiveDirectoryModule"
+$configFile = "$PSScriptRoot\$scriptName.config"
+$logfile = "$PSScriptRoot\$scriptName.log"
+$adModulePath = "$PSScriptRoot\ActiveDirectoryModule"
 $global:adModuleDllLoaded = $false
 $objectIndex = 1
 $global:queryIndex = 1
@@ -185,7 +214,7 @@ $global:queryResults = @{}
 #$PSModuleAutoloadingPreference = “none” #disable auto loading of modules
 loadAssembly "System.Web"
 loadAssembly "System.Windows.Forms"
-loadModule "ActiveDirectory" "`nTo install the Active Directory module type 'install-Module ActiveDirectory'`nYou may need to install the Remote Server Administration tools (RSAT) from Software Center`n" @{"$scriptDir\Microsoft.ActiveDirectory.Management.dll"="You are running this script on a computer that does NOT have the RSAT tools install, limited functionality is available."}
+loadModule "ActiveDirectory" "`nTo install the Active Directory module type 'install-Module ActiveDirectory'`nYou may need to install the Remote Server Administration tools (RSAT) from Software Center`n" @{"$PSScriptRoot\Microsoft.ActiveDirectory.Management.dll"="You are running this script on a computer that does NOT have the RSAT tools install, limited functionality is available."}
 $global:canExportToExcel = loadModule "ImportExcel" -required $false -commentError "`nTo enable export to Excel please install the Import Excel module type 'install-Module ImportExcel'"
 #loadModule "Microsoft.PowerShell.Utility" "`nTo install the Microsoft.PowerShell.Utility module type 'install-Module Microsoft.PowerShell.Utility'"
 #Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
@@ -197,7 +226,7 @@ $global:domains = New-Object -TypeName PSCustomObject
 if(Test-Path -Path $configFile -PathType Leaf){$global:config = Get-Content($configFile) | ConvertFrom-Json}
 @("properties";"groupPolicies") | %{if(!$global:config.$_){Add-Member -InputObject $global:config -type NoteProperty -Name $_ -Value (New-Object -TypeName PSCustomObject) -Force}}
 #===================================================================
-$html = Get-Content "$scriptDir\GUI.html" -Raw
+$html = Get-Content "$PSScriptRoot\GUI.html" -Raw
 $Properties_Common =@("Name:checked";"description";"DistinguishedName:checked";"whencreated";"whenchanged")
 $objects = [ordered]@{
     user = @{
@@ -366,8 +395,9 @@ function homeSubmitSearch() {
                                     }else{
                                         switch($_.Name.tolower()){
                                             "members"{
-                                                Add-Member -InputObject $exportItem -type NoteProperty -Name "membersCount" -Value $item.$_.count -Force
-                                                Add-Member -InputObject $item -type NoteProperty -Name "membersCount" -Value $item.$_.count -Force                          
+                                                $memberCount = $item.$_.count #($item.$_|Get-Member -Type NoteProperty).count
+                                                Add-Member -InputObject $exportItem -type NoteProperty -Name "membersCount" -Value $memberCount -Force
+                                                Add-Member -InputObject $item -type NoteProperty -Name "membersCount" -Value $memberCount -Force                          
                                                 $allResolved = $true
                                                 $members = $item.$_ | %{
                                                     if($global:ADObjects.objects.containsKey($_)){
@@ -523,16 +553,6 @@ function homeSubmitSearch() {
                 write-log "INFO" "Adding the table to the GUI" $true
                 $web.Document.InvokeScript("addTab", @("home-result";$typeSelect;$domain;[string]$table,'table',$global:queryIndex,($result.count -eq $maxResults)))
             }
-            <#
-            If($heightSet -eq $false){  
-                $heightSet = $true
-                $height = $form.Height += $web.document.all["home-result-card"].DomElement.clientHeight + 40 
-                #+= $web.document.all["home-result-card"].Children | ForEach-Object -begin {$sum=0} -process{$sum+=$_.DomElement.clientHeight} -end{$sum}
-                #$web.document.all["home-result-card"].DomElement | select *  | %{write-host $_} 
-                if($height -gt ($screenHeight-60)){$height = $screenHeight-60;$form.Top = 10}
-                if((($screenHeight-60) - $height) -lt $form.Top ){$form.top = (($screenHeight-60) - $height)}
-                if($height -gt 100){$web.Height = $height -40; $form.Height = $height}    
-            }#>
         }
         if($resultCount -eq 0){$web.Document.InvokeScript("showAlert", @("warning"; "No Data"; if($errorString){$errorString}else{"No $typeSelect objects were found with the search string $identity"}));}
         adjustClassOnHTMLElement "Remove" "d-none" "home-result-card"
@@ -746,33 +766,46 @@ function DocumentCompleted(){
     write-host -Message "DocumentCompleted event fired"
     if ($global:isLoaded -eq $true) { return }
     $global:isLoaded = $true
+    if($global:config.PSobject.Properties.Name -contains 'Form Dimensions'){
+        $dimensions = $global:config.'Form Dimensions'.PSObject.Properties
+        $form.SetDesktopLocation($dimensions['left'].Value, $dimensions['top'].Value);
+    }
+    #==============================================
+    #Load plugins    
+    Get-ChildItem -path "$PSScriptRoot\Plugins\*" -Include *.ps1 | %{$file=$_.name;try{. ("$PSScriptRoot\Plugins\$file")}catch{write-log "ERROR" "An error occurred loading the plugin file $file. $($_.Exception.Message)"}} 
     #==============================================
     #Get version and about
     try{
-        write-log "INFO" "Attempting to get version info from https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/version.info"
+        write-log "INFO" "Attempting to get version info from $($app.repoRaw)$($app.versionFile)"
         [System.Windows.Forms.Application]::DoEvents() 
-        $appInfo = "$(Invoke-WebRequest https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/version.info)||".split("|")
+        $appInfo = "$(Invoke-WebRequest "$($app.repoRaw)$($app.versionFile)")||".split("|")
         if($appInfo[0]-match '[0-9].[0-9].[0-9]' -and $app.version -lt $appInfo[0]){
             $app.newVersion = $true
-            $versionInfo = "A newer version of this app is available.<br> You have version $($app.version), the latest version is $($appInfo[0]).<p/><p>You can download the latest version here <a href=`"#`" onClick=`"`$('#powershellButton').attr('object','$($appInfo[1])').attr('cmd','openURL').trigger('click')`">$($appInfo[1])</a><p>The new version features $($appInfo[2])"
+            try{
+                [System.Windows.Forms.Application]::DoEvents() 
+                write-log "INFO" "Attempting to download the updater from $($app.repoRaw)$($app.updater)"
+                (New-Object System.Net.WebClient).DownloadFile("$($app.repoRaw)$($app.updater)", "$PSScriptRoot\updater.ps1")
+            }catch{write-log "ERROR" "Failed to download updater script. $($_.Exception.Message)"} 
+
+            $versionInfo = "A newer version of this app is available.<br> You have version $($app.version), the latest version is $($appInfo[0]).<p/><p>You can review the latest version info here <a href=`"#`" onClick=`"`$('#powershellButton').attr('object','$($appInfo[1])').attr('cmd','StartProcess').trigger('click')`">$($appInfo[1])</a><p>The new version features $($appInfo[2])"
             $global:aboutInfo += "<div class=`"alert alert-info`" role=`"alert`">$versionInfo</div>"
             write-log "INFO" "A newer version of this app is available.You have version $($app.version), the latest version is $($appInfo[0])"
-            $web.Document.InvokeScript("showAlert", @("info";"Newer Version Available";$versionInfo))
+            $web.Document.InvokeScript("askQuestion", @("info";"Newer Version Available";"$versionInfo.<p>Do you want to download the new version now?";"`$('#powershellButton').attr('cmd','doUpdate').trigger('click');"))
         }
     }catch{write-log "ERROR" "Failed to get the current version. $($_.Exception.Message)"}
     
-    if(!(Test-Path -Path "$scriptDir\about.md" -PathType Leaf) -or $app.newVersion){
+    if(!(Test-Path -Path "$PSScriptRoot\about.md" -PathType Leaf) -or $app.newVersion){
         try{
             [System.Windows.Forms.Application]::DoEvents() 
-            write-log "INFO" "Attempting to download readme file from https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/README.md" -logonly $true
-            (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/haydentrail/ADPowershellGUI/main/README.md", "$scriptDir\about.md")
+            write-log "INFO" "Attempting to download readme file from $($app.repoRaw)$($app.readme)" -logonly $true
+            (New-Object System.Net.WebClient).DownloadFile("$($app.repoRaw)$($app.readme)", "$PSScriptRoot\about.md")
         }catch{write-log "ERROR" "Failed to download readme file. $($_.Exception.Message)"}  
     }
-    if(Test-Path -Path "$scriptDir\about.md" -PathType Leaf){
+    if(Test-Path -Path "$PSScriptRoot\about.md" -PathType Leaf){
         try{
             [System.Windows.Forms.Application]::DoEvents() 
             write-log "INFO" "loading readme info" -logonly $true
-            $readme = Get-Content("$scriptDir\about.md")
+            $readme = Get-Content("$PSScriptRoot\about.md")
             $global:aboutInfo += ($readme.Split([string[]]"`r`n", [StringSplitOptions]::None) -join "<br>")
         }catch{write-log "ERROR" "Failed to download readme file. $($_.Exception.Message)"}  
     }
@@ -785,7 +818,7 @@ function DocumentCompleted(){
     Do{[System.Windows.Forms.Application]::DoEvents() ;Start-Sleep -Milliseconds 100}
     While ($web.document.all["main"].DomElement.clientHeight -eq 0)
     if(-not($global:config.PSobject.Properties.Name -contains 'Form Dimensions')){
-        if($web.Height -lt $form.Height){$web.Height = $form.Height = $web.document.all["main"].DomElement.clientHeight +80}
+        if($web.Height -lt $form.size.height){$web.Height = $form.size.height = $web.document.all["main"].DomElement.clientHeight +80}
     }
     
     $domainSelected = $null
@@ -851,7 +884,15 @@ function DocumentCompleted(){
             "domainsFromForest"{domainsFromForest $object;break;}
             "saveQuery"{saveQuery $object;break;}
             "ShowSavedQueries"{ShowSavedQueries;break;}
-            "openURL"{Start-Process $object;break;}
+            "doUpdate"{
+                write-log "INFO" "Calling: Start-Process pwsh -ArgumentList -ep Bypass -f '$PSScriptRoot\updater.ps1'"
+                Start-Process "pwsh" -WorkingDirectory $PSScriptRoot -ArgumentList "-ep Bypass -f `"$PSScriptRoot\updater.ps1`"",$PSCommandPath,$app.version,"$($app.repo)blob/main/","$($app.repoRaw)$($app.versionFile)","powershellGUI.ps1;GUI.html";$form.close();break;}
+            "StartProcess"{
+                $argList = $psBtn.GetAttribute("argList")
+                $psBtn.setAttribute("argList","")
+                Start-Process $object -ArgumentList $argList
+                break;
+            }
             default{write-host "$_ object = $object"}
         }        
     })
@@ -866,9 +907,8 @@ write-log "INFO" "Initializing $($MyInvocation.MyCommand)" $true
 #============================================
 # Main
 $global:isLoaded = $false
-
-$form = New-Object -TypeName System.Windows.Forms.Form -Property @{Width = 1200; Height = 410;StartPosition =1;MaximizeBox=$false; text = $app.title}
-$web = New-Object -TypeName System.Windows.Forms.WebBrowser -Property @{Width = 1200; Height = 410; DocumentText = $html; ScriptErrorsSuppressed = $false}
+$form = New-Object -TypeName System.Windows.Forms.Form -Property  @{Width = 1200; Height = 410;StartPosition=1;MaximizeBox=$false; text = $app.title}
+$web = New-Object -TypeName System.Windows.Forms.WebBrowser -Property @{DocumentText = $html; ScriptErrorsSuppressed = $false}
 $web.Add_DocumentCompleted({DocumentCompleted})
 
 #write-host "========================================"
@@ -876,20 +916,25 @@ $web.Add_DocumentCompleted({DocumentCompleted})
 #write-host "========================================"
 
 write-log "INFO" "Form version = $($form.ProductName) $($form.ProductVersion)"
-$form.Add_ResizeEnd({write-host "form resized"; $web.Width = $form.size.Width-20; $web.Height = $form.size.Height-60 })
-$form.Add_Closing({write-host "form closing"; Add-Member -InputObject $global:config -type NoteProperty -Name "Form Dimensions" -Value @{top=$form.top;left=$form.left;width=$form.width;height=$form.height} -Force })
+$form.Add_ResizeEnd({write-host "form resized"; $web.Width = $form.size.Width-40; $web.Height = $form.size.Height-60 })
+$form.Add_Closing({write-host "form closing"; Add-Member -InputObject $global:config -type NoteProperty -Name "Form Dimensions" -Value @{top=$form.top;left=$form.left;width=$form.Width;height=$form.height} -Force })
 if($global:config.PSobject.Properties.Name -contains 'Form Dimensions'){
-    $global:config.'Form Dimensions'.PSObject.Properties | %{$form.($_.name) = $_.value}
-    $web.width = $form.Width; if($web.Height -lt $form.Height){$web.Height = $form.Height}
+    $dimensions = $global:config.'Form Dimensions'.PSObject.Properties
+    $dimensions | %{$form.($_.name) = $_.value}
 }
+if($form.width -lt 1200){$form.width=1200}
+if($form.height -lt 633){$form.width=633}
+if($form.left -lt 0 -or $form.left -gt 3000){$form.left=100}
+if($form.top -lt 0 -or $form.top -gt 3000){$form.top=100}
+
+$web.width = $form.size.Width - 20; if($web.Height -lt $form.size.height){$web.Height = $form.size.height - 20}
 $form.Controls.Add($web)
-$form.activate()
 $form.ShowDialog() | out-null
 write-log "INFO" "Closing  $($MyInvocation.MyCommand)" $true 
 #ANYTHING UNDER THIS LINE WILL ONLY RUN ONCE THE WINDOW HAS BEEN CLOSED
 #============================================
 #export the configuration to the config file
-
 Add-Member -InputObject $global:config -type NoteProperty -Name "domains" -Value $global:domains -Force
 Add-Member -InputObject $global:config -type NoteProperty -Name "domainSelected" -Value ($web.Document.DomDocument.getElementById("home-domainSelect") | where { $_.selected } | % { $_.text }) -Force
 $global:config | ConvertTo-Json -Depth 100 | Out-File $configFile
+$form.Dispose()

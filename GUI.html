@@ -58,14 +58,13 @@
 	</style>
 </head>
 <body class=p-2>
-	<div id="LoadingOverlay" class=" loading-overlay loading-theme-dark loading-shown" style="position: fixed; z-index: 2; top: 0px; left: 0px;  width: 100%; height: 100%;"><div class="loading-overlay-content">Loading...</div></div>
+	<div id="LoadingOverlay" class=" loading-overlay loading-theme-dark loading-shown" style="position: fixed; z-index: 2; top: 0px; left: 0px;  width: 100%; height: 100%;"><div id="loadingContent" class="loading-overlay-content">Loading...</div></div>
 	<div id="ReadyOverlay" class="d-none loading-overlay loading-theme-dark loading-shown" style="position: fixed; z-index: 2; top: 0px; left: 0px; width: 100%; height: 100%;"><div class="loading-overlay-content">Working...</div></div>
 	<div id="Ready" class="container-fluid" style="position: relative;">
 		<div id="Main" class="m-2">
 			<nav>
 				<div class="nav nav-tabs" id="nav-tab" role="tablist">
 					<button onclick="openTab(event, 'nav-home','-main')" class="nav-link nav-link-main active" id="nav-home-tab" data-bs-toggle="tab" data-bs-target="#nav-home" type="button" role="tab" aria-controls="nav-home" aria-selected="true">Search</button>
-					<button onclick="openTab(event, 'nav-schema','-main')" class="d-none nav-link nav-link-main" id="nav-schema-tab" data-bs-toggle="tab" data-bs-target="#nav-schema" type="button" role="tab" aria-controls="nav-schema" aria-selected="false">Object Schema</button>
 					<button onclick="openTab(event, 'nav-about','-main')" class="nav-link nav-link-main" id="nav-about-tab" data-bs-toggle="tab" data-bs-target="#nav-about" type="button" role="tab" aria-controls="nav-about" aria-selected="false">About</button>
 				</div>
 			</nav>
@@ -204,27 +203,21 @@
 						</div>
 					</div>
 				</div>
-				<div class="tab-pane tab-pane-main" id="nav-schema" role="tabpanel" aria-labelledby="nav-schema-tab">
-					<div class="card">
-						<div class="card-header">Active Directory object attributes </div>
-						<div class="card-body">
-							
-						</div>
-					</div>
-				</div>
 				<div class="tab-pane tab-pane-main" id="nav-about" role="tabpanel" aria-labelledby="nav-about-tab">
-					<div class="card">
 					<div class="card">
 						<div id="about-header" class="card-header">Active Directory Powershell GUI </div>
 						<div class="card-body">
 							<h5 class="card-title">Written by Hayden Trail</h5>
-							<p class="card-text" id="home-about">For support, bug fixes, or enhancement requests <a href="#" onClick="$('#powershellButton').attr('object','https://github.com/haydentrail/ADPowershellGUI/issues').attr('cmd','openURL').trigger('click')">click here</a> to log an issue.</p>
-							
+							<p class="card-text" id="home-about">For support, bug fixes, or enhancement requests <a href="#" onClick="$('#powershellButton').attr('object','https://github.com/haydentrail/ADPowershellGUI/issues').attr('cmd','StartProcess').trigger('click')">click here</a> to log an issue.</p>
 						</div>
 					</div>
 				</div>
 			</div>
 		</div>
+	</div>
+	<div id="Updater" class="d-none row container-fluid d-flex justify-content-md-center" style="position: relative;">
+		<ul id="updater-list" class="col-12 m-2 list-group"></ul>
+		<button class="d-none col-3 btn btn-outline-info" id="updaterButton" onClick="$('#powershellButton').attr('cmd','returnToCaller').trigger('click');">Return to Caller</button>
 	</div>
 	
 	<button class="d-none" id="powershellButton"></button>
@@ -594,7 +587,6 @@ function(a){return this.iterator("table",function(b){b._colReorder&&b._colReorde
 		RAW:'Enter a raw Powershell command ie. Get-ADGroup -server "{{domain}}" -Filter * | Where {-not $_.members}',
 	};
 	$( document ).ready(function() {
-    	$("#Ready").removeClass("d-none");
 		$('#home-identity').on('keypress',function(e) {if(e.which == 13){$("#ReadyOverlay").removeClass('d-none'); $("#home-submitSearch").trigger( "click" )}});
 		$('#home-typeSelect').on('change',function(e) {hometypeSelect(this.value.toLowerCase())});
 		$('.checkAll').on('change',function(e) {let check = this.checked;$("#"+$(this).attr("parent")).find(".form-check-input:visible").each(function() {$(this).prop('checked', check);});});
@@ -732,20 +724,24 @@ function(a){return this.iterator("table",function(b){b._colReorder&&b._colReorde
 		});
 		$('[data-toggle="tooltip"]').tooltip();
 	}
-	function askQuestion(icon,title,message,confirmCmd,cancelCmd){
+	function askQuestion(icon,title,message,confirmCmd,denyCmd,cancelCmd){
 		var data = {icon: "info",showCancelButton: true,confirmButtonText: 'Yes',cancelButtonText: 'Cancel'};
-		if(cancelCmd) {data.showDenyButton=true;data.denyButtonText="No"}
+		if(denyCmd) {data.showDenyButton=true;data.denyButtonText="No"}
 		if(icon)data.icon = icon;
 		if(title)data.title = title;
 		if(message)data.html = message;
-		Swal.fire(data).then(function(result){if (result.isConfirmed && confirmCmd) {eval(confirmCmd)}else if(result.isDenied && cancelCmd){eval(cancelCmd)}})
+		Swal.fire(data).then(function(result){
+			if (result.isConfirmed && confirmCmd) {eval(confirmCmd)}
+			else if(result.isDenied && denyCmd){eval(denyCmd)}
+			else if(cancelCmd){eval(cancelCmd)}
+		})
 	}
-	function showAlert(icon,title,message){
+	function showAlert(icon,title,message,confirmCmd){
 		var data = {icon: "info",allowOutsideClick:false};
 		if(icon)data.icon = icon;
 		if(title)data.title = title;
 		if(message)data.html = message;
-		Swal.fire(data);
+		Swal.fire(data).then(function(){if(confirmCmd){eval(confirmCmd)}})
 	}
 	function addTab(elementID,typeSelect,id,content,contentType,queryIndex,MoreData){
 		idFix = _.join(_.split(id,'.'),'-');
@@ -805,4 +801,5 @@ function(a){return this.iterator("table",function(b){b._colReorder&&b._colReorde
 		evt.currentTarget.className += " active";
 	}
 </script>
+
 </html>
