@@ -42,9 +42,10 @@ $downloadFile = {
     }  
 }
 function proceed(){
-    $jobsDone = $filesToDownload.count
+    $files = $filesToDownload -split ";"
+    $jobsDone = $files.count
     $Results = @{}
-    $filesToDownload -split ";" | ForEach-Object -begin {$index=0} -process{
+    $files| ForEach-Object -begin {$index=0} -process{
         $listItem = $web.Document.CreateElement("li");
         $listItem.SetAttribute("className","list-group-item d-flex justify-content-between align-items-center");
         $listItem.InnerHtml = "$_<span id=`"$_`" class=`"badge bg-primary badge-pill`">Downloading...</span>"
@@ -94,7 +95,7 @@ function getCurrentVersion(){
         write-host "Attempting to get version info from $versionFile"
         $appInfo = "$(Invoke-WebRequest $versionFile)||".split("|")
         if($appInfo[0]-match '[0-9].[0-9].[0-9]' -and $appVersion -lt $appInfo[0]){
-            $fileList = $filesToDownload | %{"<li class=`"list-group-item`">$_</li>"}
+            $fileList = $filesToDownload -split ";" | %{"<li class=`"list-group-item`">$_</li>"}
             $web.Document.InvokeScript("askQuestion", @("question"; "Proceed With Download?";"You are about to overwrite the following files:<p><ul class=`"list-group list-group-flush`">$fileList</ul><p><hr>Proceed?";"`$('#powershellButton').attr('cmd','proceed').trigger('click');";$null;"`$('#powershellButton').attr('cmd','returnToCaller').trigger('click');"));
         }else{
             $versionInfo = "You have version $($app.version), the latest version is $($appInfo[0]).<p/><p>An update is not required.  Press ok to re-load the master script"
