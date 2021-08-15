@@ -9,6 +9,7 @@
 #>
 
 [cmdletbinding()]Param (
+    [Parameter(Mandatory=$true)][string]$callingScriptName,
     [Parameter(Mandatory=$true)][string]$callingScript,
     [Parameter(Mandatory=$true)][string]$appVersion,
     [Parameter(Mandatory=$true)][string]$repoRaw,
@@ -98,7 +99,7 @@ function getCurrentVersion(){
             $fileList = $filesToDownload -split ";" | %{"<li class=`"list-group-item`">$_</li>"}
             $web.Document.InvokeScript("askQuestion", @("question"; "Proceed With Download?";"You are about to overwrite the following files:<p><ul class=`"list-group list-group-flush`">$fileList</ul><p><hr>Proceed?";"`$('#powershellButton').attr('cmd','proceed').trigger('click');";$null;"`$('#powershellButton').attr('cmd','returnToCaller').trigger('click');"));
         }else{
-            $versionInfo = "You have version $($app.version), the latest version is $($appInfo[0]).<p/><p>An update is not required.  Press ok to re-load the master script"
+            $versionInfo = "You have version $($app.version), the latest version is $($appInfo[0]).<p/><p>An update is not required.  Press ok to return to $callingScriptName"
             $web.Document.InvokeScript("showAlert", @("info";"No Update Required";$versionInfo;$afterCmd))
         }
     }catch{
@@ -112,6 +113,7 @@ function DocumentCompleted(){
     if ($global:app.isLoaded -eq $true) { return }
     $global:app.isLoaded = $true
     
+    $web.Document.GetElementById("updaterButton").InnerText = "Return to $callingScriptName"
     $web.Document.GetElementById("Ready").SetAttribute("className", "d-none")
     $web.Document.GetElementById("Updater").SetAttribute("className", "container-fluid row d-flex justify-content-md-center")
     $loader = $web.Document.all["loadingContent"]
