@@ -16,6 +16,17 @@
     [Parameter(Mandatory=$true)][string]$filesToDownload
     )
 $global:app = @{title="Script Updater";version="0.1";isLoaded=$false}
+function global:loadAssembly($assembly){
+    try{[Reflection.Assembly]::Load($assembly) | Out-Null}
+    catch{
+        write-host "$assembly is required for this script. $($_.Exception.Message)"
+        write-host "Press any key to exit";$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | out-null
+        exit -1
+    }
+}
+loadAssembly "System.Web"
+loadAssembly "System.Windows.Forms"
+
 $afterCmd = "`$('#powershellButton').attr('object','$callingScript').attr('cmd','returnToCaller').trigger('click');"
 $retryCmd = "`$('#powershellButton').attr('cmd','retry').trigger('click');"
 $downloadFile = {
