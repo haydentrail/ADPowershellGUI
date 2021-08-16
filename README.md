@@ -29,6 +29,12 @@ Requires the Microsoft Remote Server Administration tools installed for the acti
   * Added ability to save and load RAW queries
   * Added form returns to the last location and size
   * Added version control
+  * Added self updating process using updater.ps1
+
+## Future Enhancements 
+
+ * Plugins. You will be able to create new tabs with your own plugins
+ * Tab Pinning.  Ability to lock a tab so that if a command is run against the same domain it does not overwrite the data
 
 ## Known issues 
 

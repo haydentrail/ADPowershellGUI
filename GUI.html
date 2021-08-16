@@ -64,8 +64,8 @@
 		<div id="Main" class="m-2">
 			<nav>
 				<div class="nav nav-tabs" id="nav-tab" role="tablist">
-					<button onclick="openTab(event, 'nav-home','-main')" class="nav-link nav-link-main active" id="nav-home-tab" data-bs-toggle="tab" data-bs-target="#nav-home" type="button" role="tab" aria-controls="nav-home" aria-selected="true">Search</button>
-					<button onclick="openTab(event, 'nav-about','-main')" class="nav-link nav-link-main" id="nav-about-tab" data-bs-toggle="tab" data-bs-target="#nav-about" type="button" role="tab" aria-controls="nav-about" aria-selected="false">About</button>
+					<button onclick="openTab('nav-home','-main')" class="nav-link nav-link-main active" id="nav-home-tab" data-bs-toggle="tab" data-bs-target="#nav-home" type="button" role="tab" aria-controls="nav-home" aria-selected="true">Search</button>
+					<button onclick="openTab('nav-about','-main')" class="nav-link nav-link-main" id="nav-about-tab" data-bs-toggle="tab" data-bs-target="#nav-about" type="button" role="tab" aria-controls="nav-about" aria-selected="false">About</button>
 				</div>
 			</nav>
 			<div class="tab-content" id="nav-tabContent">
@@ -751,11 +751,12 @@ function(a){return this.iterator("table",function(b){b._colReorder&&b._colReorde
 			tabPane.empty();
 		}else{	
 			var active = ($('#'+elementID+'-nav-tab').children().length == 0)? "active":"";
-			var tab = $($.parseHTML('<div class="nav-item position-relative"><button onclick="openTab(event, \''+elementID+'-nav-'+idFix+'\',\''+elementID+'\')" class="nav-link nav-link'+elementID+' '+active+'" id="'+elementID+'-nav-'+idFix+'-tab" data-bs-toggle="tab" data-bs-target="#'+elementID+'-nav-'+idFix+'" type="button" role="tab" aria-controls="'+elementID+'-nav-'+idFix+'" aria-selected="false">'+id+'</button></div>'));
+			var tab = $($.parseHTML('<div class="nav-item position-relative"><button onclick="openTab(\''+elementID+'-nav-'+idFix+'\',\''+elementID+'\')" class="nav-link nav-link'+elementID+' '+active+'" id="'+elementID+'-nav-'+idFix+'-tab" data-bs-toggle="tab" data-bs-target="#'+elementID+'-nav-'+idFix+'" type="button" role="tab" aria-controls="'+elementID+'-nav-'+idFix+'" aria-selected="false">'+id+'</button></div>'));
 			tabPane = $($.parseHTML('<div style="overflow-x: scroll" class="p-3 tab-pane tab-pane'+elementID+' '+active+'" id="'+elementID+'-nav-'+idFix+'" role="tabpanel" aria-labelledby="'+elementID+'-nav-'+idFix+'-tab"></div>'));
 			$('#'+elementID+"-nav-tab").append(tab)	;	
 			$('#'+elementID+"-nav-tabContent").append(tabPane);
 		}
+		$('#'+elementID+'-nav-'+idFix+'-tab').trigger('click')
 		var tabHTML = _.capitalize(typeSelect)+' results for '+id+'. <a href="#" onclick="removeElement(\'#'+elementID+'-nav-'+idFix+'\');removeElement(\'#'+elementID+'-nav-'+idFix+'-tab\');$(\'#powershellButton\').attr(\'object\',\''+queryIndex+'\').attr(\'cmd\',\'remove\').trigger(\'click\')">Click here</a> to remove this tab.  '
 		if(queryIndex) tabHTML+='<a href="#" onclick="exportTab(\''+typeSelect+'\',\''+id+'\',\''+queryIndex+'\')">Click here</a> to export this tab. '+more
 		tabHTML+='<hr/>'
@@ -770,6 +771,8 @@ function(a){return this.iterator("table",function(b){b._colReorder&&b._colReorde
 				tabPane.append($($.parseHTML('<div class="p-2 alert alert-'+contentType+'" role="alert">'+content+'</div>')));
 				break;
 		}	
+		//
+
 	}
 	function exportTab(typeSelect,id,queryIndex){
 		let text = 'Enter the name of the export file. \n' + ((powershellVariables.canExportToExcel)? "The data will be exported to excel format.":"The inportExcel module is not loaded, the data will be exported in csv format")
@@ -790,7 +793,7 @@ function(a){return this.iterator("table",function(b){b._colReorder&&b._colReorde
 			$('#powershellButton').attr('object',queryIndex).attr('cmd','export').attr('file',result.value).trigger('click');
 		}}})
 	}
-	function openTab(evt, tabName, tabExtension) {
+	function openTab(tabName, tabExtension) {
 		var i, tabcontent, tablinks;
 		if(!tabExtension)tabExtension = "";
 		tabcontent = document.getElementsByClassName("tab-pane"+tabExtension);
@@ -798,7 +801,8 @@ function(a){return this.iterator("table",function(b){b._colReorder&&b._colReorde
 		tablinks = document.getElementsByClassName("nav-link"+tabExtension);
 		for (i = 0; i < tablinks.length; i++) {tablinks[i].className = tablinks[i].className.replace(" active", "");};
 		document.getElementById(tabName).style.display = "block";
-		evt.currentTarget.className += " active";
+		$("#"+tabName+"-tab").addClass('active')
+		//evt.currentTarget.className += " active";
 	}
 </script>
 

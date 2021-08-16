@@ -13,7 +13,6 @@
 .TODO
     - plugins for new tabs
     - pin tabs to retain
-    - create updater script
  #>
  
 $app = @{
@@ -181,7 +180,7 @@ function global:formatExcel($xlfile,$xlWorkSheets){
 function global:addTab($tab,$scriptOnly=$false){
     write-log "INFO" "Adding $($tab.title) to gui."
     $html = @{
-        tab="<button onclick=`"openTab(event, 'nav-$($Tab.id)','-main')`" class=`"nav-link nav-link-main`" id=`"nav-$($Tab.id)-tab`" data-bs-toggle=`"tab`" data-bs-target=`"#nav-$($Tab.id)`" type=`"button`" role=`"tab`" aria-controls=`"nav-$($Tab.id)`" aria-selected=`"false`">$($Tab.name)</button>"
+        tab="<button onclick=`"openTab('nav-$($Tab.id)','-main')`" class=`"nav-link nav-link-main`" id=`"nav-$($Tab.id)-tab`" data-bs-toggle=`"tab`" data-bs-target=`"#nav-$($Tab.id)`" type=`"button`" role=`"tab`" aria-controls=`"nav-$($Tab.id)`" aria-selected=`"false`">$($Tab.name)</button>"
         tabPane=@"
                 <div class="tab-pane tab-pane-main" id="nav-$($Tab.id)" role="tabpanel" aria-labelledby="nav-$($Tab.id)-tab">
                 <div class="card">
@@ -350,7 +349,8 @@ function homeSubmitSearch() {
 
                     write-log "INFO" "Calling Raw Expression: $identity"
                     [System.Windows.Forms.Application]::DoEvents()
-                    $object = Invoke-Expression $identity
+                    $object = (Invoke-Expression $identity) 2>&1
+                    if ($object -like "*Exception*") {throw $object}
                     if($object){
                         $propObj = if($object.gettype().name -eq 'Object[]'){$object[0]}else{$object}
                         $properties = $propObj.PSObject.Properties | Select-Object -Property Name | %{$_.name}
@@ -375,8 +375,8 @@ function homeSubmitSearch() {
                 $translations = @{memberof="Groups"}
                 $valuesAreDNs = @('memberof')
                 $convertProps = "lastLogon|lastLogonTimestamp|memberOf|members|gPLink|ManagedBy|Domains|GlobalCatalogs|Sites|UPNSuffixes|SPNSuffixes"
-                if($count -gt 0 -and  $properties -match "\b($convertProps)\b"){ 
-                     write-log "INFO" "Properties contain values that must be converted"
+                #if($count -gt 0 -and  $properties -match "\b($convertProps)\b"){ 
+                    #write-log "INFO" "Properties contain values that must be converted"
                     $object = $object | %{
                         $item = $_
                         $exportItem = $_.PsObject.Copy()
@@ -514,7 +514,7 @@ function homeSubmitSearch() {
                         $item   
                         $result+= $exportItem
                     }
-                }
+                #}
                 if($result){$global:queryResults."$global:queryIndex" = @{result=$result;query="$typeSelect objects with $($searchType):$identity in $domain"}}
                 $ReturnObjects.$domain = $object    
             }catch{
@@ -531,7 +531,7 @@ function homeSubmitSearch() {
             scriptbox $typeSelect $searchType $identity $_ $properties $options $ReturnObjects $creds $adModulePath $maxResults 
             $result = $ReturnObjects.$domain
             
-            write-host $result.GetType().name
+            #write-host $result.GetType().name
             if($result -eq $null){
                 write-log "WARN" "$domain query returned 0 objects"
                 $web.Document.InvokeScript("addTab", @("home-result";$typeSelect;$domain;"0 objects returned",'info',$global:queryIndex))
@@ -551,10 +551,11 @@ function homeSubmitSearch() {
                 $table = $table -replace '</th></tr>',"</th></tr></thead>"
                 $table = [System.Web.HttpUtility]::HtmlDecode($table)
                 write-log "INFO" "Adding the table to the GUI" $true
-                $web.Document.InvokeScript("addTab", @("home-result";$typeSelect;$domain;[string]$table,'table',$global:queryIndex,($result.count -eq $maxResults)))
+                $tabType = if($searchType -eq "RAW"){"RAW Query"}else{$typeSelect}
+                $web.Document.InvokeScript("addTab", @("home-result";$tabType;$domain;[string]$table,'table',$global:queryIndex,($result.count -eq $maxResults)))
             }
         }
-        if($resultCount -eq 0){$web.Document.InvokeScript("showAlert", @("warning"; "No Data"; if($errorString){$errorString}else{"No $typeSelect objects were found with the search string $identity"}));}
+        if($resultCount -eq 0){$web.Document.InvokeScript("showAlert", @("warning"; "No Data"; if($errorString){$errorString}else{"No objects were found with the search string $identity"}));}
         adjustClassOnHTMLElement "Remove" "d-none" "home-result-card"
         adjustClassOnHTMLElement "Add" "show" "home-result"
         $web.Document.GetElementById("home-result-card").Focus()
@@ -650,7 +651,7 @@ function enumUser($object){
     }
 }
 function export($object){
-    write-log "INFO" "Initializing export"
+    write-log "INFO" "Initializing export for $object"
     $psBtn = $web.Document.GetElementById('powershellButton')
     $file = $psBtn.GetAttribute("file")
     $ignoreExists = $psBtn.GetAttribute("ignoreExists")
@@ -886,7 +887,7 @@ function DocumentCompleted(){
             "ShowSavedQueries"{ShowSavedQueries;break;}
             "doUpdate"{
                 write-log "INFO" "Calling: Start-Process pwsh -ArgumentList -ep Bypass -f '$PSScriptRoot\updater.ps1'"
-                Start-Process "pwsh" -WorkingDirectory $PSScriptRoot -ArgumentList "-noe","-ep","Bypass","-f","`"updater.ps1`"","AD Powershell GUI","`"$PSCommandPath`"",$app.version,"$($app.repoRaw)main/","$($app.repoRaw)$($app.versionFile)","powershellGUI.ps1;GUI.html";$form.close();break;}
+                Start-Process "pwsh" -WorkingDirectory $PSScriptRoot -ArgumentList "-ep","Bypass","-f","`"updater.ps1`"","`"AD Powershell GUI`"","`"$PSCommandPath`"",$app.version,"$($app.repoRaw)main/","$($app.repoRaw)$($app.versionFile)","powershellGUI.ps1;GUI.html";$form.close();break;}
             "StartProcess"{
                 $argList = $psBtn.GetAttribute("argList")
                 $psBtn.setAttribute("argList","")
